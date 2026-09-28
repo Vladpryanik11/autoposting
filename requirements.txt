@@ -1,0 +1,12 @@
+requests==2.34.2
+python-dotenv==1.2.3
+PyYAML==6.0.3
+anthropic==1.8.0
+python-telegram-bot==22.8
+tzdata==2026.4
+pytest==9.1.1
+# Движок уникализации — Hostlife22/yt_uniquifier (MIT), ставится отдельно (см. README / Dockerfile):
+#   git clone https://github.com/Hostlife22/yt_uniquifier.git vendor/yt_uniquifier
+#   git -C vendor/yt_uniquifier checkout 2016d000579925c90a8e1b1270e8c05b5f3fa014
+#   git -C vendor/yt_uniquifier apply ../../patches/yt_uniquifier-rotate-corners.patch
+#   pip install -e vendor/yt_uniquifier

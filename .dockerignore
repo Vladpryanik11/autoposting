@@ -1,0 +1,11 @@
+.venv/
+.env
+data/
+vendor/
+test/
+input/
+output/
+done/
+__pycache__/
+**/__pycache__/
+*.log

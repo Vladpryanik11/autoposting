@@ -1,0 +1,12 @@
+services:
+  autopost:
+    build: .
+    env_file: .env
+    environment:
+      DATA_DIR: /app/data
+    volumes:
+      - ./data:/app/data        # база, видео, логи — переживают пересборку контейнера
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options: {max-size: "10m", max-file: "3"}

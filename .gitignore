@@ -1,0 +1,12 @@
+.env
+.venv/
+data/
+input/
+output/
+done/
+test/
+vendor/
+posted.log
+__pycache__/
+.ruff_cache/
+*.pyc
