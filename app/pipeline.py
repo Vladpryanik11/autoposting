@@ -7,6 +7,7 @@ import json
 import os
 import logging
 import random
+import shutil
 import sqlite3
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -76,7 +77,9 @@ class Pipeline:
 
     def _drop_variant(self, pub: sqlite3.Row) -> None:
         if pub["variant_path"]:
-            (self.cfg.data_dir / pub["variant_path"]).unlink(missing_ok=True)
+            media = self.cfg.data_dir / pub["variant_path"]
+            media.unlink(missing_ok=True)
+            (media.parent / (media.name + ".quality.json")).unlink(missing_ok=True)
 
     def _fail(self, pub: sqlite3.Row, error: str, final: bool = False) -> None:
         attempts = pub["attempts"] + 1
@@ -120,6 +123,19 @@ class Pipeline:
             dst.unlink(missing_ok=True)
             self._fail(pub, f"уникализация: {str(e)[:300]}")
             return 0
+        qa_staging = dst.parent / (dst.name + ".quality.json")
+        qa_archive = self.cfg.data_dir / "qa" / f"{pub['id']}.json"
+        if qa_staging.exists():
+            try:
+                qa_archive.parent.mkdir(parents=True, exist_ok=True)
+                shutil.move(str(qa_staging), str(qa_archive))
+                log_event(self.conn, "publication", pub["id"], "quality_verified",
+                          {"qa_path": qa_archive.relative_to(self.cfg.data_dir).as_posix(),
+                           "vmaf": res.get("vmaf"), "ssim": res.get("ssim")})
+            except OSError as e:
+                dst.unlink(missing_ok=True)
+                self._fail(pub, f"QA audit failed: {e}")
+                return 0
         status = REVIEW if cap.review_reason else READY
         self._set(pub["id"], status=status, caption=cap.text, title=cap.title,
                   review_reason=cap.review_reason,
