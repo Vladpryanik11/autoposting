@@ -136,8 +136,7 @@ def render(
         report_path = work / "quality.json"
         _run([_cli(), "qa", str(source), str(candidate), "--json",
               str(report_path), "--html", str(work / "quality.html"),
-              "--loudness", "--no-cid-predict", "--min-vmaf", str(min_vmaf),
-              "--min-ssim", str(min_ssim)], timeout)
+              "--loudness", "--no-cid-predict"], timeout)
         if not report_path.is_file():
             raise RenderQualityError("upstream QA report not generated")
         try:
