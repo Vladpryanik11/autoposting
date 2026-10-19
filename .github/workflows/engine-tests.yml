@@ -1,0 +1,49 @@
+name: Engine integration tests
+
+on:
+  push:
+    branches: [feature/upstream-video-engine-v2-qa]
+  pull_request:
+    paths:
+      - 'app/video_engine.py'
+      - 'app/pipeline.py'
+      - 'tests/test_video_engine.py'
+      - 'Dockerfile'
+      - '.github/workflows/engine-tests.yml'
+
+jobs:
+  contract-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install FFmpeg
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run tests
+        run: python -m pytest -q -m "not slow"
+      - name: Python compile check
+        run: python -m compileall -q app tests main.py
+
+  docker-smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build production image
+        run: docker build --progress=plain -t autopost-engine:ci .
+      - name: Check engine, VMAF and audio filters
+        run: |
+          docker run --rm autopost-engine:ci video-uniq --version
+          docker run --rm autopost-engine:ci sh -ec 'ffmpeg -hide_banner -filters | grep -E " libvmaf "'
+          docker run --rm autopost-engine:ci sh -ec 'ffmpeg -hide_banner -filters | grep -E " loudnorm "'
+      - name: Generate MP4 and test preflight
+        run: |
+          docker run --rm --entrypoint sh autopost-engine:ci -ec '
+            ffmpeg -hide_banner -loglevel error -f lavfi -i testsrc2=size=1080x1920:rate=15               -f lavfi -i sine=frequency=440:sample_rate=48000               -t 2 -c:v libx264 -preset ultrafast -c:a aac -shortest /tmp/input.mp4
+            video-uniq run /tmp/input.mp4               --profile /app/vendor/video-uniquifier/src/video_uniquifier/profiles/instagram_reels.yaml               --out /tmp/output.mp4 --no-progress --no-qa
+            test -s /tmp/output.mp4
+          '
