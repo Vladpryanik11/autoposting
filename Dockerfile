@@ -22,8 +22,9 @@ RUN git clone https://github.com/Hostlife22/yt_uniquifier.git vendor/yt_uniquifi
 # This installs the complete CLI (all upstream commands and built-in transforms).
 # Optional heavy features such as Whisper/Chromaprint require their own binaries.
 RUN python -m venv /opt/video-uniq \
- && /opt/video-uniq/bin/pip install --no-cache-dir \
-    "video-uniquifier @ git+https://github.com/Hostlife22/video-uniquifier.git@v2.1.2"
+ && git clone https://github.com/Hostlife22/video-uniquifier.git vendor/video-uniquifier \
+ && git -C vendor/video-uniquifier checkout v2.1.2 \
+ && /opt/video-uniq/bin/pip install --no-cache-dir -e vendor/video-uniquifier
 
 ENV VIDEO_UNIQ_BIN=/opt/video-uniq/bin/video-uniq
 
