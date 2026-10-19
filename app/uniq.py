@@ -6,6 +6,7 @@ yt-uniq пишет QA-отчёт (<out>.qa.json) с pHash-похожестью �
 копия слишком похожа, она переделывается с более сильным пресетом.
 """
 import json
+import math
 import os
 import random
 import shutil
@@ -86,7 +87,8 @@ def build_profile(rng: random.Random, intensity: str = "medium",
 def _yt_uniq(*args: str) -> None:
     env = dict(os.environ, PYTHONIOENCODING="utf-8", PYTHONUTF8="1")
     r = subprocess.run([sys.executable, "-m", "yt_uniquifier", *args],
-                       capture_output=True, text=True, encoding="utf-8", errors="replace", env=env)
+                       capture_output=True, text=True, encoding="utf-8", errors="replace", env=env,
+                       timeout=int(os.environ.get("UNIQ_TIMEOUT_SECONDS", "900")))
     if r.returncode != 0:
         raise RuntimeError(f"yt-uniq упал ({r.returncode}):\n{(r.stdout + r.stderr)[-3000:]}")
 
@@ -117,18 +119,39 @@ def uniqualize(src: str, dst: str, intensity: str = "medium", fmt: str | None = 
     if os.path.exists(qa_json):
         with open(qa_json, encoding="utf-8") as f:
             sim = json.load(f).get("phash_similarity")
+        if sim is not None:
+            try:
+                sim = float(sim)
+            except (TypeError, ValueError) as exc:
+                raise RuntimeError(f"Некорректная метрика pHash: {sim!r}") from exc
+            if not math.isfinite(sim) or not 0.0 <= sim <= 1.0:
+                raise RuntimeError(f"Метрика pHash вне диапазона 0..1: {sim!r}")
     return {"profile": profile, "similarity": sim}
 
 
 def uniqualize_checked(src: str, dst: str, max_similarity: float | None = None,
                        intensity: str = "medium", **kw) -> dict:
     """Если pHash-похожесть выше порога — переделать с более сильным пресетом."""
+    if max_similarity is not None and not 0.0 <= max_similarity <= 1.0:
+        raise ValueError("max_similarity должен быть в диапазоне 0..1")
+    if intensity not in LEVELS:
+        raise ValueError(f"Неизвестная интенсивность: {intensity!r}")
+
+    results = []
     for level in LEVELS[LEVELS.index(intensity):]:
         res = uniqualize(src, dst, intensity=level, qa=True, **kw)
         res["intensity"] = level
-        if max_similarity is None or res["similarity"] is None or res["similarity"] <= max_similarity:
-            break
-    return res
+        results.append({"intensity": level, "similarity": res["similarity"]})
+        if max_similarity is None:
+            return res
+        if res["similarity"] is not None and res["similarity"] <= max_similarity:
+            return res
+    # Fail closed: не отправлять на публикацию ролик без измерения или
+    # с недостаточным результатом даже после максимально сильного профиля.
+    raise RuntimeError(
+        "Не пройден QA уникализации: " + json.dumps(results, ensure_ascii=False)
+        + f"; порог={max_similarity}. Требуется ручная редакционная переработка."
+    )
 
 
 def cleanup_reports(dst: str) -> None:

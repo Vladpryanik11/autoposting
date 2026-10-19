@@ -18,6 +18,15 @@ RUN git clone https://github.com/Hostlife22/yt_uniquifier.git vendor/yt_uniquifi
  && git -C vendor/yt_uniquifier apply ../../patches/yt_uniquifier-rotate-corners.patch \
  && pip install --no-cache-dir -e vendor/yt_uniquifier
 
+# Independent upstream v2 CLI: keep legacy engine and its dependencies isolated.
+# This installs the complete CLI (all upstream commands and built-in transforms).
+# Optional heavy features such as Whisper/Chromaprint require their own binaries.
+RUN python -m venv /opt/video-uniq \
+ && /opt/video-uniq/bin/pip install --no-cache-dir \
+    "video-uniquifier @ git+https://github.com/Hostlife22/video-uniquifier.git@v2.1.2"
+
+ENV VIDEO_UNIQ_BIN=/opt/video-uniq/bin/video-uniq
+
 COPY app/ app/
 COPY main.py pytest.ini ./
 COPY tests/ tests/
