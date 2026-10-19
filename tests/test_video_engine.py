@@ -52,10 +52,11 @@ def test_render_calls_one_upstream_binary_and_qa(monkeypatch, tmp_path):
         if args[1] == "qa":
             Path(args[args.index("--json") + 1]).write_text(
                 json.dumps({"vmaf_mean": 91.3, "ssim_mean": 0.97,
-                            "phash_similarity": 0.98}), encoding="utf-8")
+                            "phash_similarity": 0.98, "duration_match": True,
+                            "correctness": {"status": "passed", "full_decode_status": "passed"}}), encoding="utf-8")
 
     monkeypatch.setattr(v, "_run", upstream)
-    monkeypatch.setattr(v, "_validate_structure", lambda *a: {"width": 1080, "height": 1920})
+    monkeypatch.setattr(v, "_validate_structure", lambda *a: {"width": 1080, "height": 1920, "audio_streams": 0})
     monkeypatch.setattr(v, "_decode_full", lambda *a: None)
     result = v.render(src, dst)
     assert [x[1] for x in commands] == ["run", "qa"]
@@ -75,8 +76,22 @@ def test_render_fails_closed_on_bad_metrics(monkeypatch, tmp_path):
             Path(args[args.index("--json") + 1]).write_text(
                 json.dumps({"vmaf_mean": None, "ssim_mean": 0.96}), encoding="utf-8")
     monkeypatch.setattr(v, "_run", upstream)
-    monkeypatch.setattr(v, "_validate_structure", lambda *a: {})
+    monkeypatch.setattr(v, "_validate_structure", lambda *a: {"audio_streams": 0})
     monkeypatch.setattr(v, "_decode_full", lambda *a: None)
     with pytest.raises(v.RenderQualityError, match="unavailable"):
         v.render(src, dst)
     assert not dst.exists()
+
+
+def test_upstream_correctness_rejected():
+    with pytest.raises(v.RenderQualityError, match="correctness"):
+        v._check_report_contract({"correctness": {"status": "failed"}}, False)
+
+
+def test_audio_quality_rejected():
+    report = {"duration_match": True,
+              "correctness": {"status": "passed", "full_decode_status": "passed"},
+              "loudness": {"status": "passed", "streams": [
+                  {"status": "passed", "integrated_lufs": -12.0, "true_peak_dbtp": 0.0}]}}
+    with pytest.raises(v.RenderQualityError, match="audio out of range"):
+        v._check_report_contract(report, True)
