@@ -10,14 +10,16 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# yt_uniquifier — проверенная версия + наш патч чёрных углов при повороте
-ARG YT_UNIQUIFIER_COMMIT=2016d000579925c90a8e1b1270e8c05b5f3fa014
-COPY patches/ patches/
-RUN git clone https://github.com/Hostlife22/yt_uniquifier.git vendor/yt_uniquifier \
- && git -C vendor/yt_uniquifier checkout "$YT_UNIQUIFIER_COMMIT" \
- && git -C vendor/yt_uniquifier apply ../../patches/yt_uniquifier-rotate-corners.patch \
- && pip install --no-cache-dir -e vendor/yt_uniquifier
+# Single, pinned upstream source tree; MIT attribution retained in vendor/LICENSE.
+# v2.1.2 resolves to commit 2d967b15d182af6ac4d5c303c3adce625eba98b0.
+ARG VIDEO_UNIQ_COMMIT=2d967b15d182af6ac4d5c303c3adce625eba98b0
+RUN git clone https://github.com/Hostlife22/video-uniquifier.git vendor/video-uniquifier \
+ && git -C vendor/video-uniquifier checkout --detach "$VIDEO_UNIQ_COMMIT" \
+ && pip install --no-cache-dir -e vendor/video-uniquifier
 
+# Required executable exposed by pyproject.toml.
+RUN video-uniq --version
+ENV VIDEO_UNIQ_BIN=video-uniq
 COPY app/ app/
 COPY main.py pytest.ini ./
 COPY tests/ tests/
