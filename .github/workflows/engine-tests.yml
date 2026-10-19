@@ -1,0 +1,27 @@
+name: Engine integration tests
+
+on:
+  push:
+    branches: [feature/upstream-video-engine-v2-qa]
+  pull_request:
+    paths:
+      - 'app/video_engine.py'
+      - 'app/pipeline.py'
+      - 'tests/test_video_engine.py'
+      - 'Dockerfile'
+      - '.github/workflows/engine-tests.yml'
+
+jobs:
+  contract-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Run tests
+        run: python -m pytest -q -m "not slow"
+      - name: Python compile check
+        run: python -m compileall -q app tests main.py
