@@ -34,7 +34,7 @@ def default_render(cfg: Settings):
     def render(src: Path, dst: Path) -> dict:
         from app.video_engine import render as v2_render
         dst.parent.mkdir(parents=True, exist_ok=True)
-        res = v2_render(src, dst, profile=os.environ.get("VIDEO_UNIQ_PROFILE", "auto"),
+        res = v2_render(src, dst, profile=os.environ.get("VIDEO_UNIQ_PROFILE", "/app/vendor/video-uniquifier/src/video_uniquifier/profiles/instagram_reels.yaml"),
                         encoder=cfg.uniq_encoder or None,
                         min_vmaf=float(os.environ.get("VIDEO_UNIQ_MIN_VMAF", "75")),
                         min_ssim=float(os.environ.get("VIDEO_UNIQ_MIN_SSIM", "0.80")),
