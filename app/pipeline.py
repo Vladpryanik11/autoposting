@@ -4,6 +4,7 @@
 по кругу, а после сбоя продолжает с того же места.
 """
 import json
+import os
 import logging
 import random
 import sqlite3
@@ -30,11 +31,13 @@ PLATFORM_ICON = {"instagram": "📸", "tiktok": "🎵", "youtube": "▶️", "ot
 
 def default_render(cfg: Settings):
     def render(src: Path, dst: Path) -> dict:
-        from app.uniq import cleanup_reports, uniqualize_checked
+        from app.video_engine import render as v2_render
         dst.parent.mkdir(parents=True, exist_ok=True)
-        res = uniqualize_checked(str(src), str(dst), cfg.uniq_max_similarity, cfg.uniq_intensity,
-                                 fmt="reels", encoder=cfg.uniq_encoder or None)
-        cleanup_reports(str(dst))
+        res = v2_render(src, dst, profile=os.environ.get("VIDEO_UNIQ_PROFILE", "auto"),
+                        encoder=cfg.uniq_encoder or None,
+                        min_vmaf=float(os.environ.get("VIDEO_UNIQ_MIN_VMAF", "75")),
+                        min_ssim=float(os.environ.get("VIDEO_UNIQ_MIN_SSIM", "0.80")),
+                        timeout=int(os.environ.get("VIDEO_UNIQ_TIMEOUT_SECONDS", "1800")))
         return {"similarity": res["similarity"], "intensity": res["intensity"]}
     return render
 
