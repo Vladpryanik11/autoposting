@@ -6,6 +6,7 @@ This module does not implement an alternative video transformation engine.
 from __future__ import annotations
 
 import json
+import math
 import os
 from pathlib import Path
 import shutil
@@ -62,6 +63,8 @@ def _validate_structure(source: Path, result: Path) -> dict:
     w, h = int(ov[0].get("width") or 0), int(ov[0].get("height") or 0)
     if not w or not h or w % 2 or h % 2:
         raise RenderQualityError(f"invalid output dimensions: {w}x{h}")
+    if (w, h) != (1080, 1920):
+        raise RenderQualityError(f"Reels output must be 1080x1920, got {w}x{h}")
     duration = float(out.get("format", {}).get("duration") or 0)
     if duration <= 0:
         raise RenderQualityError("empty output duration")
@@ -92,7 +95,6 @@ def _quality_check(report: dict, min_vmaf: float, min_ssim: float) -> tuple[floa
         vmaf, ssim = float(vmaf), float(ssim)
     except (ValueError, TypeError) as exc:
         raise RenderQualityError("invalid VMAF/SSIM values") from exc
-    import math
     if not (math.isfinite(vmaf) and math.isfinite(ssim)):
         raise RenderQualityError("nonfinite VMAF/SSIM values")
     if not (0 <= vmaf <= 100 and -1 <= ssim <= 1):
@@ -102,6 +104,38 @@ def _quality_check(report: dict, min_vmaf: float, min_ssim: float) -> tuple[floa
             f"quality below minimum: VMAF={vmaf:.2f}/{min_vmaf}; SSIM={ssim:.4f}/{min_ssim}"
         )
     return vmaf, ssim
+
+
+def _check_report_contract(report: dict, has_audio: bool, min_lufs: float = -24.0,
+                           max_lufs: float = -8.0, max_true_peak: float = -1.0) -> None:
+    """Check upstream correctness and output loudness evidence, fail closed."""
+    correctness = report.get("correctness")
+    if not isinstance(correctness, dict) or correctness.get("status") != "passed":
+        raise RenderQualityError("upstream correctness not verified or failed")
+    if correctness.get("full_decode_status") != "passed":
+        raise RenderQualityError("upstream full decode not verified")
+    if report.get("duration_match") is not True:
+        raise RenderQualityError("duration mismatch")
+    if not has_audio:
+        return
+    loudness = report.get("loudness")
+    if not isinstance(loudness, dict) or loudness.get("status") != "passed":
+        raise RenderQualityError("loudness measurement missing or failed")
+    streams = loudness.get("streams") or []
+    if not streams:
+        raise RenderQualityError("no measured audio streams")
+    for stream in streams:
+        if stream.get("status") != "passed":
+            raise RenderQualityError("audio loudness scan incomplete")
+        try:
+            lufs = float(stream["integrated_lufs"])
+            peak = float(stream["true_peak_dbtp"])
+        except (TypeError, ValueError, KeyError) as exc:
+            raise RenderQualityError("invalid loudness metrics") from exc
+        if not (math.isfinite(lufs) and math.isfinite(peak)):
+            raise RenderQualityError("nonfinite audio metrics")
+        if not min_lufs <= lufs <= max_lufs or peak > max_true_peak:
+            raise RenderQualityError(f"audio out of range: {lufs} LUFS, {peak} dBTP")
 
 
 def render(
@@ -144,6 +178,7 @@ def render(
         except (ValueError, OSError) as exc:
             raise RenderQualityError("invalid upstream QA report") from exc
         vmaf, ssim = _quality_check(report, min_vmaf, min_ssim)
+        _check_report_contract(report, dimensions["audio_streams"] > 0)
         os.replace(candidate, destination)
         diagnostic = {
             "engine": "video-uniquifier", "version": "v2.1.2",
@@ -151,9 +186,12 @@ def render(
             "structure": dimensions,
             "upstream_report": report,
         }
-        (destination.parent / (destination.name + ".quality.json")).write_text(
-            json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding="utf-8"
-        )
+        try:
+            (destination.parent / (destination.name + ".quality.json")).write_text(
+                json.dumps(diagnostic, ensure_ascii=False, indent=2), encoding="utf-8"
+            )
+        except OSError as exc:
+            raise RenderQualityError(f"failed to persist QA audit: {exc}") from exc
         return {"similarity": report.get("phash_similarity"),
                 "intensity": "upstream-v2", "vmaf": vmaf, "ssim": ssim}
     except Exception:
